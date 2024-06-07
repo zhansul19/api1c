@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 import clickhouse_connect
+import psycopg2
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -11,7 +13,40 @@ client = clickhouse_connect.get_client(user='nifitest',
                                        port=8123)
 
 
-# Define FastAPI endpoint
+DATABASE_CONFIG = {
+        'database': 'postgres',
+        'user': 'photo_user',
+        'password': 'TgYhUj123!@#',
+        'host': '192.168.122.6',
+        'port': '5432'
+}
+
+
+def connect_to_db():
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        return conn
+    except Exception as e:
+        print("Unable to connect to the database:", e)
+        return None
+
+
+@app.get("/get_photo/{iin}")
+async def read_photo(iin: str):
+    conn = connect_to_db()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return StreamingResponse(iter([bytes(row[0])]),media_type='application/octet-stream')
+        else:
+            raise HTTPException(status_code=404, detail="No photo found for the given iin")
+    else:
+        raise HTTPException(status_code=500, detail="Failed to connect to the database")
+
+
 @app.get("/get_data/{iin}")
 async def get_data(iin: str):
     if len(iin) != 12:
@@ -59,12 +94,6 @@ async def get_data(iin: str):
     return result.named_results()
 
 
-@app.get("/get_data2/{iin}")
-async def get_data2(iin: str):
-    return iin
-  # query = (f'SELECT fpn.IIN,fpn.FIRSTNAME,fpn.SECONDNAME,nn.ID,fpn.SURNAME,fpn.SEX_ID,fpn.CITIZENSHIP_ID, MAX(dd.DOCUMENT_NUMBER) as DOCUMENT_NUMBER '
-    #          f'FROM ser.fl_person_new as fpn '
-    #          f'inner join db_fl_ul_dpar.damp_document as dd on fpn.IIN = dd.IIN '
-    #          f'inner join db_fl_ul_dpar.nationality_MENS as nn on fpn.NATIONALTY_ID = CAST(nn.ID as String) '
-    #          f'WHERE fpn.IIN like \'{iin}\' and dd.DOCUMENT_TYPE_ID like \'УДОСТОВЕРЕНИЕ РК\' '
-    #          f'GROUP BY fpn.IIN, fpn.FIRSTNAME, fpn.SECONDNAME, fpn.SURNAME, fpn.SEX_ID, fpn.CITIZENSHIP_ID, nn.ID',)
+@app.get("/hello")
+async def get_data2():
+    return "hello world"
