@@ -2,7 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 import clickhouse_connect
 import psycopg2
-
+from PIL import Image
+import io
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -46,6 +47,27 @@ async def read_photo(iin: str):
     else:
         raise HTTPException(status_code=500, detail="Failed to connect to the database")
 
+@app.get("/get_photo_png/{iin}")
+async def read_photo(iin: str):
+    conn = connect_to_db()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            # Convert bytea data to PNG image
+            bytea_data = row[0]
+            image = Image.open(io.BytesIO(bytea_data))
+
+            # Convert the image to PNG format and return it
+            with io.BytesIO() as output:
+                image.save(output, format="PNG")
+                return StreamingResponse(iter([output.getvalue()]), media_type='image/png')
+
+    else:
+        raise HTTPException(status_code=500, detail="Failed to connect to the database")
+
 
 @app.get("/get_data/{iin}")
 async def get_data(iin: str):
@@ -53,39 +75,38 @@ async def get_data(iin: str):
         raise HTTPException(status_code=404, detail="IIN Length should be 12")
 
     query = ("""
-        SELECT
-            fpn.IIN AS IIN,
-            fpn.FIRSTNAME AS FIRSTNAME,
-            fpn.SECONDNAME AS SECONDNAME,
-            fpn.SURNAME AS SURNAME,
-            IF(fpn.SEX_ID = '1', 'Мужчина', IF(fpn.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
-            fpn.BIRTH_DATE AS BIRTH_DATE,
-            n.RU_NAME AS NATIONALITY,
-            MAX(dd.DOCUMENT_NUMBER) AS DOCUMENT_NUMBER,
-            dc.RU_NAME AS COUNTRY_RU_NAME,
-            dc.KZ_NAME AS COUNTRY_KZ_NAME
-        FROM
-            ser.fl_person_new AS fpn
-        INNER JOIN
-            db_fl_ul_dpar.damp_document AS dd ON fpn.IIN = dd.IIN
-        INNER JOIN
-            db_fl_ul_dpar.DIC_COUNTRY AS dc ON fpn.CITIZENSHIP_ID = CAST(dc.ID AS String)
-        INNER JOIN
-            db_fl_ul_dpar.nationality AS n ON fpn.NATIONALTY_ID = CAST(n.ID AS String) AND fpn.SEX_ID = n.SEX
-        WHERE
-            fpn.IIN = %(iin)s
-            AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-        GROUP BY
-            fpn.IIN,
-            fpn.FIRSTNAME,
-            fpn.SECONDNAME,
-            fpn.SURNAME,
-            fpn.BIRTH_DATE,
+        select dd.IIN IIN,
+        dd.FIRSTNAME_ FIRSTNAME,
+        dd.SURNAME_ SURNAME,
+        dd.SECONDNAME_ SECONDNAME,            
+		IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
+		dd.BIRTH_DATE_ BIRTH_DATE,
+		dd.DOCUMENT_NUMBER DOCUMENT_NUMBER,
+		n.RU_NAME AS NATIONALITY,
+		n.KZ_NAME AS NATIONALITY_KZ,
+		dc.RU_NAME AS COUNTRY_RU_NAME,
+		dc.KZ_NAME AS COUNTRY_KZ_NAME
+from db_fl_ul_dpar.damp_document as dd 
+INNER JOIN db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
+INNER JOIN db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
+WHERE
+      dd.IIN = %(iin)s AND 
+     dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  and
+     dd.DOCUMENT_BEGIN_DATE =(SELECT MAX(d2.DOCUMENT_BEGIN_DATE) from  db_fl_ul_dpar.damp_document d2 where d2.IIN=%(iin)s AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  )
+GROUP BY
+            dd.IIN,
+            dd.FIRSTNAME_,
+            dd.SECONDNAME_,
+            dd.SURNAME_,
+            dd.BIRTH_DATE_,
             dc.RU_NAME,
             dc.KZ_NAME,
-            fpn.SEX_ID,
+            dd.SEX_ID,
             n.RU_NAME,
-            fpn.CITIZENSHIP_ID
+            n.KZ_NAME,
+            dd.CITIZENSHIP_ID,
+            dd.DOCUMENT_NUMBER,
+            dd.DOCUMENT_BEGIN_DATE
     """)
 
     result = client.query(query, parameters={'iin': iin})
