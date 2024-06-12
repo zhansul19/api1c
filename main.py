@@ -85,10 +85,13 @@ async def get_data(iin: str):
 		n.RU_NAME AS NATIONALITY,
 		n.KZ_NAME AS NATIONALITY_KZ,
 		dc.RU_NAME AS COUNTRY_RU_NAME,
-		dc.KZ_NAME AS COUNTRY_KZ_NAME
+		dc.KZ_NAME AS COUNTRY_KZ_NAME,
+		ra.`Адрес на русском` as ADDRESS
 from db_fl_ul_dpar.damp_document as dd 
 INNER JOIN db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
 INNER JOIN db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
+INNER JOIN db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
+
 WHERE
       dd.IIN = %(iin)s AND 
      dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  and
@@ -106,6 +109,7 @@ GROUP BY
             n.KZ_NAME,
             dd.CITIZENSHIP_ID,
             dd.DOCUMENT_NUMBER,
+            ra.`Адрес на русском`,
             dd.DOCUMENT_BEGIN_DATE
     """)
 
