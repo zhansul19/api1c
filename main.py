@@ -75,43 +75,62 @@ async def get_data(iin: str):
         raise HTTPException(status_code=404, detail="IIN Length should be 12")
 
     query = ("""
-         select dd.IIN IIN,
-        dd.FIRSTNAME_ FIRSTNAME,
-        dd.SURNAME_ SURNAME,
-        dd.SECONDNAME_ SECONDNAME,            
-		IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
-		dd.BIRTH_DATE_ BIRTH_DATE,
-		dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
-		dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
-		dr.RU_NAME AS BIRTH_REGION_RU_NAME,
-		dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
-		dd.BIRTH_CITY BIRTH_CITY,
-		dd.DOCUMENT_NUMBER DOCUMENT_NUMBER,
-		n.RU_NAME AS NATIONALITY,
-		n.KZ_NAME AS NATIONALITY_KZ,
-		dc.RU_NAME AS COUNTRY_RU_NAME,
-		dc.KZ_NAME AS COUNTRY_KZ_NAME,
-		ra.`Адрес на русском` as ADDRESS,
-		nb.phonenumber_ AS PHONE_NUMBER, 
-		groupArray(tuple(s.study_name,s.spec_name , s.start_date,s.end_date )) AS study,
-		groupArray(tuple(s2.school_name, s2.start_date,s2.end_date )) AS school
-
-from db_fl_ul_dpar.damp_document as dd 
-INNER JOIN db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
-INNER JOIN db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
-INNER JOIN db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
-INNER JOIN db_fl_ul_dpar.study  AS s ON dd.IIN = s.iin 
-INNER JOIN db_fl_ul_dpar.school AS s2 ON dd.IIN = s2.iin  
-INNER JOIN db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_  
-INNER JOIN db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID  = CAST(dd2.ID AS String)
-INNER JOIN db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID  AS String)
-
-
-WHERE
-      dd.IIN = %(iin)s AND 
-     dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  and
-     dd.DOCUMENT_BEGIN_DATE =(SELECT MAX(d2.DOCUMENT_BEGIN_DATE) from  db_fl_ul_dpar.damp_document d2 where d2.IIN=%(iin)s AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  )
-GROUP BY
+         SELECT 
+            dd.IIN AS IIN,
+            dd.FIRSTNAME_ AS FIRSTNAME,
+            dd.SURNAME_ AS SURNAME,
+            dd.SECONDNAME_ AS SECONDNAME,
+            IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
+            dd.BIRTH_DATE_ AS BIRTH_DATE,
+            dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
+            dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
+            dr.RU_NAME AS BIRTH_REGION_RU_NAME,
+            dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
+            dd.BIRTH_CITY AS BIRTH_CITY,
+            dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
+            n.RU_NAME AS NATIONALITY,
+            n.KZ_NAME AS NATIONALITY_KZ,
+            dc.RU_NAME AS COUNTRY_RU_NAME,
+            dc.KZ_NAME AS COUNTRY_KZ_NAME,
+            ra.`Адрес на русском` AS ADDRESS,
+            nb.phonenumber_ AS PHONE_NUMBER,
+            groupArray(tuple(s.study_name, s.spec_name, s.start_date, s.end_date)) AS STUDY,
+            s2.school_info as SCHOOL
+        FROM 
+            db_fl_ul_dpar.damp_document AS dd 
+        INNER JOIN 
+            db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
+        INNER JOIN 
+            db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
+        INNER JOIN 
+            db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
+        INNER JOIN 
+            db_fl_ul_dpar.study AS s ON dd.IIN = s.iin
+        INNER JOIN (
+            SELECT 
+                iin,
+                groupArray(tuple(school_name, start_date, end_date)) AS school_info
+            FROM 
+                db_fl_ul_dpar.school
+            GROUP BY 
+                iin
+        ) AS s2 ON dd.IIN = s2.iin
+        INNER JOIN 
+            db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
+        INNER JOIN 
+            db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
+        INNER JOIN 
+            db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
+        WHERE
+            dd.IIN = %(iin)s 
+            AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  
+            AND dd.DOCUMENT_BEGIN_DATE = (
+                SELECT MAX(d2.DOCUMENT_BEGIN_DATE) 
+                FROM db_fl_ul_dpar.damp_document d2 
+                WHERE d2.IIN = %(iin)s  
+                AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
+            )
+        GROUP BY
             dd.IIN,
             dd.FIRSTNAME_,
             dd.SECONDNAME_,
@@ -134,8 +153,7 @@ GROUP BY
             ra.`Адрес на русском`,
             dd.DOCUMENT_BEGIN_DATE,
             nb.phonenumber_,
-            s.study_name ,s.spec_name , s.start_date,s.end_date  ,
-            s2.school_name, s2.start_date,s2.end_date
+            s2.school_info
     """)
 
     result = client.query(query, parameters={'iin': iin})
@@ -150,11 +168,19 @@ async def get_relatives(iin: str):
 
     query = ("""
         SELECT 
-            fr.iin,groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type)) AS relatives
+            fr.iin,
+            CASE
+                WHEN MAX(LENGTH(fr.marriage_divorce_date)) > 1 THEN 'Divorced'
+                WHEN MAX(LENGTH(fr.marriage_reg_date)) > 1 THEN 'Married'
+                ELSE 'Single'
+            END AS STATUS,
+            groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type)) AS relatives
         FROM 
             ser.fl_relatives fr 
-        WHERE fr.iin=%(iin)s
-        group by fr.iin
+        WHERE 
+            fr.iin = %(iin)s
+        GROUP BY 
+            fr.iin
     """)
 
     result = client.query(query, parameters={'iin': iin})
