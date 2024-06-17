@@ -87,14 +87,18 @@ async def get_data(iin: str):
             dr.RU_NAME AS BIRTH_REGION_RU_NAME,
             dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
             dd.BIRTH_CITY AS BIRTH_CITY,
+            
             dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
+            dd.ISSUE_ORGANIZATION_ID,
+            dd.DOCUMENT_BEGIN_DATE,
+            dd.DOCUMENT_END_DATE,
             n.RU_NAME AS NATIONALITY,
             n.KZ_NAME AS NATIONALITY_KZ,
             dc.RU_NAME AS COUNTRY_RU_NAME,
             dc.KZ_NAME AS COUNTRY_KZ_NAME,
             ra.`Адрес на русском` AS ADDRESS,
             nb.phonenumber_ AS PHONE_NUMBER,
-            groupArray(tuple(s.study_name, s.spec_name, s.start_date, s.end_date)) AS STUDY,
+            s.study_info AS STUDY,
             s2.school_info as SCHOOL
         FROM 
             db_fl_ul_dpar.damp_document AS dd 
@@ -104,12 +108,19 @@ async def get_data(iin: str):
             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
         INNER JOIN 
             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
-        INNER JOIN 
-            db_fl_ul_dpar.study AS s ON dd.IIN = s.iin
         INNER JOIN (
             SELECT 
                 iin,
-                groupArray(tuple(school_name, start_date, end_date)) AS school_info
+                groupArray(tuple(study_code,study_name, start_date, end_date)) AS study_info
+            FROM 
+                db_fl_ul_dpar.study
+            GROUP BY 
+                iin
+        ) AS s ON dd.IIN = s.iin
+        INNER JOIN (
+            SELECT 
+                iin,
+                groupArray(tuple(school_code,school_name, start_date, end_date)) AS school_info
             FROM 
                 db_fl_ul_dpar.school
             GROUP BY 
@@ -122,12 +133,12 @@ async def get_data(iin: str):
         INNER JOIN 
             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
         WHERE
-            dd.IIN = %(iin)s 
+            dd.IIN = '991206300443'
             AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  
             AND dd.DOCUMENT_BEGIN_DATE = (
                 SELECT MAX(d2.DOCUMENT_BEGIN_DATE) 
                 FROM db_fl_ul_dpar.damp_document d2 
-                WHERE d2.IIN = %(iin)s  
+                WHERE d2.IIN = '991206300443' 
                 AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
             )
         GROUP BY
@@ -150,10 +161,14 @@ async def get_data(iin: str):
             n.KZ_NAME,
             dd.CITIZENSHIP_ID,
             dd.DOCUMENT_NUMBER,
+            dd.ISSUE_ORGANIZATION_ID,
+            dd.DOCUMENT_BEGIN_DATE,
+            dd.DOCUMENT_END_DATE,
             ra.`Адрес на русском`,
             dd.DOCUMENT_BEGIN_DATE,
             nb.phonenumber_,
-            s2.school_info
+            s2.school_info,
+            s.study_info
     """)
 
     result = client.query(query, parameters={'iin': iin})
