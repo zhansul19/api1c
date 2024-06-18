@@ -133,12 +133,12 @@ async def get_data(iin: str):
         INNER JOIN 
             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
         WHERE
-            dd.IIN = '991206300443'
+            dd.IIN = %(iin)s 
             AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  
             AND dd.DOCUMENT_BEGIN_DATE = (
                 SELECT MAX(d2.DOCUMENT_BEGIN_DATE) 
                 FROM db_fl_ul_dpar.damp_document d2 
-                WHERE d2.IIN = '991206300443' 
+                WHERE d2.IIN = %(iin)s 
                 AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
             )
         GROUP BY
