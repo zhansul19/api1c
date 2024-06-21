@@ -102,13 +102,13 @@ async def get_data(iin: str):
             s2.school_info as SCHOOL
         FROM 
             db_fl_ul_dpar.damp_document AS dd 
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
-        INNER JOIN (
+        LEFT JOIN (
             SELECT 
                 iin,
                 groupArray(tuple(study_code,study_name, start_date, end_date)) AS study_info
@@ -117,7 +117,7 @@ async def get_data(iin: str):
             GROUP BY 
                 iin
         ) AS s ON dd.IIN = s.iin
-        INNER JOIN (
+        LEFT JOIN (
             SELECT 
                 iin,
                 groupArray(tuple(school_code,school_name, start_date, end_date)) AS school_info
@@ -126,11 +126,11 @@ async def get_data(iin: str):
             GROUP BY 
                 iin
         ) AS s2 ON dd.IIN = s2.iin
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
-        INNER JOIN 
+        LEFT JOIN 
             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
         WHERE
             dd.IIN = %(iin)s 
