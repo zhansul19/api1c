@@ -4,6 +4,7 @@ import clickhouse_connect
 import psycopg2
 from PIL import Image
 import io
+import httpx
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -97,9 +98,8 @@ async def get_data(iin: str):
             dc.RU_NAME AS COUNTRY_RU_NAME,
             dc.KZ_NAME AS COUNTRY_KZ_NAME,
             ra.`Адрес на русском` AS ADDRESS,
-            nb.phonenumber_ AS PHONE_NUMBER,
-            s.study_info AS STUDY,
-            s2.school_info as SCHOOL
+            nb.phonenumber_ AS PHONE_NUMBER
+            
         FROM 
             db_fl_ul_dpar.damp_document AS dd 
         LEFT JOIN 
@@ -108,24 +108,6 @@ async def get_data(iin: str):
             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
         LEFT JOIN 
             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
-        LEFT JOIN (
-            SELECT 
-                iin,
-                groupArray(tuple(study_code,study_name, start_date, end_date)) AS study_info
-            FROM 
-                db_fl_ul_dpar.study
-            GROUP BY 
-                iin
-        ) AS s ON dd.IIN = s.iin
-        LEFT JOIN (
-            SELECT 
-                iin,
-                groupArray(tuple(school_code,school_name, start_date, end_date)) AS school_info
-            FROM 
-                db_fl_ul_dpar.school
-            GROUP BY 
-                iin
-        ) AS s2 ON dd.IIN = s2.iin
         LEFT JOIN 
             db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
         LEFT JOIN 
@@ -166,16 +148,226 @@ async def get_data(iin: str):
             dd.DOCUMENT_END_DATE,
             ra.`Адрес на русском`,
             dd.DOCUMENT_BEGIN_DATE,
-            nb.phonenumber_,
-            s2.school_info,
-            s.study_info
+            nb.phonenumber_       
     """)
-
+    query2 = """SELECT 
+            s.iin AS IIN,
+            s.study_info AS STUDY,
+            s2.school_info AS SCHOOL
+        FROM (
+            SELECT 
+                iin,
+                groupArray(tuple(study_code, study_name, start_date, end_date)) AS study_info
+            FROM 
+                db_fl_ul_dpar.study
+            GROUP BY 
+                iin
+        ) AS s
+        LEFT JOIN (
+            SELECT 
+                iin,
+                groupArray(tuple(school_code, school_name, start_date, end_date)) AS school_info
+            FROM 
+                db_fl_ul_dpar.school
+            GROUP BY 
+                iin
+        ) AS s2 ON s.iin = s2.iin
+        WHERE s.iin = %(iin)s 
+        """
     result = client.query(query, parameters={'iin': iin})
-    if not result.result_rows:
-        raise HTTPException(status_code=404, detail="Data not found")
-    return result.named_results()
+    result2 = client.query(query2, parameters={'iin': iin})
 
+
+    # if not result.result_rows:
+    #     raise HTTPException(status_code=404, detail="Data not found")
+    # if not result2.result_rows:
+    #     raise HTTPException(status_code=404, detail="Data not found")
+
+    combined = {
+        "data": result.named_results(),
+        "study": result2.named_results()
+    }
+    # return combined
+    return combined
+
+
+# SELECT
+# dd.IIN
+# AS
+# IIN,
+# dd.FIRSTNAME
+# AS
+# FIRSTNAME,
+# dd.SURNAME
+# AS
+# SURNAME,
+# dd.SECONDNAME
+# AS
+# SECONDNAME,
+# IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS
+# SEX,
+# dd.BIRTH_DATE
+# AS
+# BIRTH_DATE,
+# dd2.RU_NAME
+# AS
+# BIRTH_DISTRICT_RU_NAME,
+# dd2.KZ_NAME
+# AS
+# BIRTH_DISTRICT_KZ_NAME,
+# dr.RU_NAME
+# AS
+# BIRTH_REGION_RU_NAME,
+# dr.KZ_NAME
+# AS
+# BIRTH_REGION_KZ_NAME,
+# dd.BIRTH_CITY
+# AS
+# BIRTH_CITY,
+#
+# n.RU_NAME
+# AS
+# NATIONALITY,
+# n.KZ_NAME
+# AS
+# NATIONALITY_KZ,
+# dc.RU_NAME
+# AS
+# COUNTRY_RU_NAME,
+# dc.KZ_NAME
+# AS
+# COUNTRY_KZ_NAME,
+# ra.
+# `Адрес
+# на
+# русском
+# ` AS
+# ADDRESS,
+# nb.phonenumber_
+# AS
+# PHONE_NUMBER,
+# s.study_info
+# AS
+# STUDY,
+# s2.school_info as SCHOOL
+# FROM
+# db_fl_ul_dpar.person as dd
+# LEFT
+# JOIN
+# db_fl_ul_dpar.DIC_COUNTRY
+# AS
+# dc
+# ON
+# dd.CITIZENSHIP_ID = CAST(dc.ID
+# AS
+# String)
+# LEFT
+# JOIN
+# db_fl_ul_dpar.nationality
+# AS
+# n
+# ON
+# dd.NATIONALTY_ID = CAST(n.ID
+# AS
+# String) AND
+# dd.SEX_ID = n.SEX
+# LEFT
+# JOIN
+# db_fl_ul_dpar.reg_address
+# AS
+# ra
+# ON
+# dd.IIN = ra.
+# `ИИН / БИН`
+# LEFT
+# JOIN(
+#     SELECT
+# iin,
+# groupArray(tuple(study_code, study_name, start_date, end_date))
+# AS
+# study_info
+# FROM
+# db_fl_ul_dpar.study
+# GROUP
+# BY
+# iin
+# ) AS
+# s
+# ON
+# dd.IIN = s.iin
+# LEFT
+# JOIN(
+#     SELECT
+# iin,
+# groupArray(tuple(school_code, school_name, start_date, end_date))
+# AS
+# school_info
+# FROM
+# db_fl_ul_dpar.school
+# GROUP
+# BY
+# iin
+# ) AS
+# s2
+# ON
+# dd.IIN = s2.iin
+# LEFT
+# JOIN
+# db_fl_ul_dpar.numb
+# AS
+# nb
+# ON
+# dd.IIN = nb.iin_
+# LEFT
+# JOIN
+# db_fl_ul_dpar.DIC_DISTRICTS
+# AS
+# dd2
+# ON
+# dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID
+# AS
+# String)
+# LEFT
+# JOIN
+# db_fl_ul_dpar.DIC_REGION
+# AS
+# dr
+# ON
+# dd.BIRTH_REGION_ID = CAST(dr.ID
+# AS
+# String)
+# WHERE
+# dd.IIN = '831116401655'
+#
+# GROUP
+# BY
+# dd.IIN,
+# dd.FIRSTNAME,
+# dd.SECONDNAME,
+# dd.SURNAME,
+# dd.BIRTH_DATE,
+# dd.BIRTH_CITY,
+# dd.BIRTH_REGION_NAME,
+# dd.BIRTH_DISTRICT_NAME,
+# dd2.RU_NAME,
+# dd2.KZ_NAME,
+# dr.RU_NAME,
+# dr.KZ_NAME,
+# dc.RU_NAME,
+# dc.KZ_NAME,
+# dd.SEX_ID,
+# n.RU_NAME,
+# n.KZ_NAME,
+# dd.CITIZENSHIP_ID,
+#
+# ra.
+# `Адрес
+# на
+# русском
+# `,
+# nb.phonenumber_,
+# s2.school_info,
+# s.study_info
 @app.get("/get_relatives/{iin}")
 async def get_relatives(iin: str):
     if len(iin) != 12:
