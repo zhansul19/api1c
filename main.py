@@ -128,7 +128,8 @@ async def read_photo(iin: str):
             s.iin AS IIN,
             s.study_info AS STUDY,
             s2.school_info AS SCHOOL,
-            ra.`Адрес на русском` AS ADDRESS
+            ra.`Адрес на русском` AS ADDRESS,
+          nb.phonenumber_ AS PHONE_NUMBER
 
         FROM (
             SELECT 
@@ -150,7 +151,9 @@ async def read_photo(iin: str):
         ) AS s2 ON s.iin = s2.iin
         LEFT JOIN 
             db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН` 
-
+        LEFT JOIN
+           db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
+           
                 WHERE s.iin = %(iin)s 
                 """
         result = client.query(query2, parameters={'iin': iin})
