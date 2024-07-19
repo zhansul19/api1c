@@ -71,89 +71,65 @@ async def read_photo(iin: str):
 
 
 @app.get("/get_data/{iin}")
-async def get_data(iin: str):
-    if len(iin) != 12:
-        raise HTTPException(status_code=404, detail="IIN Length should be 12")
+async def read_photo(iin: str):
+    conn = connect_to_db()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("""select 
+             fp."IIN", 
+             fp."FIRSTNAME",
+             fp."SURNAME",
+              fp."SECONDNAME",
 
-    query = ("""
-         SELECT 
-            dd.IIN AS IIN,
-            dd.FIRSTNAME_ AS FIRSTNAME,
-            dd.SURNAME_ AS SURNAME,
-            dd.SECONDNAME_ AS SECONDNAME,
-            IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
-            dd.BIRTH_DATE_ AS BIRTH_DATE,
-            dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
-            dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
-            dr.RU_NAME AS BIRTH_REGION_RU_NAME,
-            dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
-            dd.BIRTH_CITY AS BIRTH_CITY,
+             case 
+                when fp."SEX_ID"='1' then 'Мужчина'
+                when fp."SEX_ID"='2' then 'Женщина'
+             end as SEX,
+             fp."BIRTH_DATE",
+             
+             dc."RU_NAME" as "BIRTH_COUNTRY_RU",
+             dc."KZ_NAME"as "BIRTH_COUNTRY_KZ",
+             
+             dd."RU_NAME" as "BIRTH_DISTRICT_NAME_RU",
+             dd."KZ_NAME" as "BIRTH_DISTRICT_NAME_KZ",
+             dr."RU_NAME" as "BIRTH_REGION_NAME_RU",
+             dr."KZ_NAME" as "BIRTH_REGION_NAME_KZ",
             
-            dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
-            dd.ISSUE_ORGANIZATION_ID,
-            dd.DOCUMENT_BEGIN_DATE,
-            dd.DOCUMENT_END_DATE,
-            n.RU_NAME AS NATIONALITY,
-            n.KZ_NAME AS NATIONALITY_KZ,
-            dc.RU_NAME AS COUNTRY_RU_NAME,
-            dc.KZ_NAME AS COUNTRY_KZ_NAME,
-            ra.`Адрес на русском` AS ADDRESS,
-            nb.phonenumber_ AS PHONE_NUMBER
+             fp."BIRTH_CITY",
+             fp."CITIZENSHIP_ID",
+             
+             dn."RU_NAME" as "NATIONALITY_RU",
+             dn."KZ_NAME" as "NATIONALITY_KZ",
+             
+             ddtn."RU_NAME" as "DOCUMENT_TYPE",
+             fd."DOCUMENT_NUMBER",
+             fd."DOCUMENT_BEGIN_DATE",
+             fd."DOCUMENT_END_DATE",
+             ddo."RU_NAME" as "ISSUE_ORGANIZATION"
+            from imp_kfm_fl.fl_person fp 
+            left outer join imp_kfm_fl.fl_document fd  on fp."ID"  = fd."PERSON_ID" 
+            inner join "dictionary".d_country dc on fp."BIRTH_COUNTRY_ID" = cast(dc."ID" as text )
+            inner join "dictionary".d_nationality_new dn on fp."NATIONALTY_ID" =cast(dn."ID"  as text )
+            inner join "dictionary".d_districts dd on fp."BIRTH_DISTRICTS_ID"  =cast(dd."ID"  as text )
+            inner join "dictionary".d_region dr on fp."BIRTH_REGION_ID"  =cast(dr."ID"  as text )
+            inner join "dictionary".d_document_type_new ddtn on fd."DOCUMENT_TYPE_ID" =cast(ddtn."ID"  as text )
+            inner join "dictionary".d_doc_organization ddo on fd."ISSUE_ORGANIZATION_ID" =cast(ddo."ID"  as text )
             
-        FROM 
-            db_fl_ul_dpar.damp_document AS dd 
-        LEFT JOIN 
-            db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
-        LEFT JOIN 
-            db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
-        LEFT JOIN 
-            db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН` 
-        LEFT JOIN 
-            db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
-        LEFT JOIN 
-            db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
-        LEFT JOIN 
-            db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
-        WHERE
-            dd.IIN = %(iin)s 
-            AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'  
-            AND dd.DOCUMENT_BEGIN_DATE = (
-                SELECT MAX(d2.DOCUMENT_BEGIN_DATE) 
-                FROM db_fl_ul_dpar.damp_document d2 
-                WHERE d2.IIN = %(iin)s 
-                AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-            )
-        GROUP BY
-            dd.IIN,
-            dd.FIRSTNAME_,
-            dd.SECONDNAME_,
-            dd.SURNAME_,
-            dd.BIRTH_DATE_,
-            dd.BIRTH_CITY,
-            dd.BIRTH_REGION_NAME,
-            dd.BIRTH_DISTRICT_NAME,
-            dd2.RU_NAME,
-            dd2.KZ_NAME,
-            dr.RU_NAME,
-            dr.KZ_NAME,
-            dc.RU_NAME,
-            dc.KZ_NAME,
-            dd.SEX_ID,
-            n.RU_NAME,
-            n.KZ_NAME,
-            dd.CITIZENSHIP_ID,
-            dd.DOCUMENT_NUMBER,
-            dd.ISSUE_ORGANIZATION_ID,
-            dd.DOCUMENT_BEGIN_DATE,
-            dd.DOCUMENT_END_DATE,
-            ra.`Адрес на русском`,
-            dd.DOCUMENT_BEGIN_DATE,
-            nb.phonenumber_       
-    """)
-    query2 = """SELECT 
+            
+            where fp."IIN" like %s
+            AND ddtn."ID" = 2 
+            order by fd."DOCUMENT_BEGIN_DATE" desc
+""", (iin,))
+        row = cursor.fetchone()
+        conn.close()
+
+
+        query2 = """SELECT 
             s.iin AS IIN,
             s.study_info AS STUDY,
-            s2.school_info AS SCHOOL
+            s2.school_info AS SCHOOL,
+            ra.`Адрес на русском` AS ADDRESS
+
         FROM (
             SELECT 
                 iin,
@@ -172,202 +148,139 @@ async def get_data(iin: str):
             GROUP BY 
                 iin
         ) AS s2 ON s.iin = s2.iin
-        WHERE s.iin = %(iin)s 
-        """
-    result = client.query(query, parameters={'iin': iin})
-    result2 = client.query(query2, parameters={'iin': iin})
+        LEFT JOIN 
+            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН` 
 
+                WHERE s.iin = %(iin)s 
+                """
+        result = client.query(query2, parameters={'iin': iin})
+        if row:
+            data = {
+                "postgres":row,
 
-    # if not result.result_rows:
-    #     raise HTTPException(status_code=404, detail="Data not found")
-    # if not result2.result_rows:
-    #     raise HTTPException(status_code=404, detail="Data not found")
+                "data": result.named_results()
+            }
 
-    combined = {
-        "data": result.named_results(),
-        "study": result2.named_results()
-    }
-    # return combined
-    return combined
+            return data
 
+    else:
+        raise HTTPException(status_code=500, detail="Failed to connect to the database")
 
-# SELECT
-# dd.IIN
-# AS
-# IIN,
-# dd.FIRSTNAME
-# AS
-# FIRSTNAME,
-# dd.SURNAME
-# AS
-# SURNAME,
-# dd.SECONDNAME
-# AS
-# SECONDNAME,
-# IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS
-# SEX,
-# dd.BIRTH_DATE
-# AS
-# BIRTH_DATE,
-# dd2.RU_NAME
-# AS
-# BIRTH_DISTRICT_RU_NAME,
-# dd2.KZ_NAME
-# AS
-# BIRTH_DISTRICT_KZ_NAME,
-# dr.RU_NAME
-# AS
-# BIRTH_REGION_RU_NAME,
-# dr.KZ_NAME
-# AS
-# BIRTH_REGION_KZ_NAME,
-# dd.BIRTH_CITY
-# AS
-# BIRTH_CITY,
+# @app.get("/get_data/{iin}")
+# async def get_data(iin: str):
+#     if len(iin) != 12:
+#         raise HTTPException(status_code=404, detail="IIN Length should be 12")
 #
-# n.RU_NAME
-# AS
-# NATIONALITY,
-# n.KZ_NAME
-# AS
-# NATIONALITY_KZ,
-# dc.RU_NAME
-# AS
-# COUNTRY_RU_NAME,
-# dc.KZ_NAME
-# AS
-# COUNTRY_KZ_NAME,
-# ra.
-# `Адрес
-# на
-# русском
-# ` AS
-# ADDRESS,
-# nb.phonenumber_
-# AS
-# PHONE_NUMBER,
-# s.study_info
-# AS
-# STUDY,
-# s2.school_info as SCHOOL
-# FROM
-# db_fl_ul_dpar.person as dd
-# LEFT
-# JOIN
-# db_fl_ul_dpar.DIC_COUNTRY
-# AS
-# dc
-# ON
-# dd.CITIZENSHIP_ID = CAST(dc.ID
-# AS
-# String)
-# LEFT
-# JOIN
-# db_fl_ul_dpar.nationality
-# AS
-# n
-# ON
-# dd.NATIONALTY_ID = CAST(n.ID
-# AS
-# String) AND
-# dd.SEX_ID = n.SEX
-# LEFT
-# JOIN
-# db_fl_ul_dpar.reg_address
-# AS
-# ra
-# ON
-# dd.IIN = ra.
-# `ИИН / БИН`
-# LEFT
-# JOIN(
-#     SELECT
-# iin,
-# groupArray(tuple(study_code, study_name, start_date, end_date))
-# AS
-# study_info
-# FROM
-# db_fl_ul_dpar.study
-# GROUP
-# BY
-# iin
-# ) AS
-# s
-# ON
-# dd.IIN = s.iin
-# LEFT
-# JOIN(
-#     SELECT
-# iin,
-# groupArray(tuple(school_code, school_name, start_date, end_date))
-# AS
-# school_info
-# FROM
-# db_fl_ul_dpar.school
-# GROUP
-# BY
-# iin
-# ) AS
-# s2
-# ON
-# dd.IIN = s2.iin
-# LEFT
-# JOIN
-# db_fl_ul_dpar.numb
-# AS
-# nb
-# ON
-# dd.IIN = nb.iin_
-# LEFT
-# JOIN
-# db_fl_ul_dpar.DIC_DISTRICTS
-# AS
-# dd2
-# ON
-# dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID
-# AS
-# String)
-# LEFT
-# JOIN
-# db_fl_ul_dpar.DIC_REGION
-# AS
-# dr
-# ON
-# dd.BIRTH_REGION_ID = CAST(dr.ID
-# AS
-# String)
-# WHERE
-# dd.IIN = '831116401655'
+#     query = ("""
+#          SELECT
+#             dd.IIN AS IIN,
+#             dd.FIRSTNAME_ AS FIRSTNAME,
+#             dd.SURNAME_ AS SURNAME,
+#             dd.SECONDNAME_ AS SECONDNAME,
+#             IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
+#             dd.BIRTH_DATE_ AS BIRTH_DATE,
+#             dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
+#             dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
+#             dr.RU_NAME AS BIRTH_REGION_RU_NAME,
+#             dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
+#             dd.BIRTH_CITY AS BIRTH_CITY,
 #
-# GROUP
-# BY
-# dd.IIN,
-# dd.FIRSTNAME,
-# dd.SECONDNAME,
-# dd.SURNAME,
-# dd.BIRTH_DATE,
-# dd.BIRTH_CITY,
-# dd.BIRTH_REGION_NAME,
-# dd.BIRTH_DISTRICT_NAME,
-# dd2.RU_NAME,
-# dd2.KZ_NAME,
-# dr.RU_NAME,
-# dr.KZ_NAME,
-# dc.RU_NAME,
-# dc.KZ_NAME,
-# dd.SEX_ID,
-# n.RU_NAME,
-# n.KZ_NAME,
-# dd.CITIZENSHIP_ID,
+#             dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
+#             dd.ISSUE_ORGANIZATION_ID,
+#             dd.DOCUMENT_BEGIN_DATE,
+#             dd.DOCUMENT_END_DATE,
+#             n.RU_NAME AS NATIONALITY,
+#             n.KZ_NAME AS NATIONALITY_KZ,
+#             dc.RU_NAME AS COUNTRY_RU_NAME,
+#             dc.KZ_NAME AS COUNTRY_KZ_NAME,
+#             ra.`Адрес на русском` AS ADDRESS,
+#             nb.phonenumber_ AS PHONE_NUMBER
 #
-# ra.
-# `Адрес
-# на
-# русском
-# `,
-# nb.phonenumber_,
-# s2.school_info,
-# s.study_info
+#         FROM
+#             db_fl_ul_dpar.damp_document AS dd
+#         LEFT JOIN
+#             db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
+#         LEFT JOIN
+#             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
+#         LEFT JOIN
+#             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН`
+#         LEFT JOIN
+#             db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
+#         LEFT JOIN
+#             db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
+#         LEFT JOIN
+#             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
+#         WHERE
+#             dd.IIN = %(iin)s
+#             AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
+#             AND dd.DOCUMENT_BEGIN_DATE = (
+#                 SELECT MAX(d2.DOCUMENT_BEGIN_DATE)
+#                 FROM db_fl_ul_dpar.damp_document d2
+#                 WHERE d2.IIN = %(iin)s
+#                 AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
+#             )
+#         GROUP BY
+#             dd.IIN,
+#             dd.FIRSTNAME_,
+#             dd.SECONDNAME_,
+#             dd.SURNAME_,
+#             dd.BIRTH_DATE_,
+#             dd.BIRTH_CITY,
+#             dd.BIRTH_REGION_NAME,
+#             dd.BIRTH_DISTRICT_NAME,
+#             dd2.RU_NAME,
+#             dd2.KZ_NAME,
+#             dr.RU_NAME,
+#             dr.KZ_NAME,
+#             dc.RU_NAME,
+#             dc.KZ_NAME,
+#             dd.SEX_ID,
+#             n.RU_NAME,
+#             n.KZ_NAME,
+#             dd.CITIZENSHIP_ID,
+#             dd.DOCUMENT_NUMBER,
+#             dd.ISSUE_ORGANIZATION_ID,
+#             dd.DOCUMENT_BEGIN_DATE,
+#             dd.DOCUMENT_END_DATE,
+#             ra.`Адрес на русском`,
+#             dd.DOCUMENT_BEGIN_DATE,
+#             nb.phonenumber_
+#     """)
+#     query2 = """SELECT
+#             s.iin AS IIN,
+#             s.study_info AS STUDY,
+#             s2.school_info AS SCHOOL
+#         FROM (
+#             SELECT
+#                 iin,
+#                 groupArray(tuple(study_code, study_name, start_date, end_date)) AS study_info
+#             FROM
+#                 db_fl_ul_dpar.study
+#             GROUP BY
+#                 iin
+#         ) AS s
+#         LEFT JOIN (
+#             SELECT
+#                 iin,
+#                 groupArray(tuple(school_code, school_name, start_date, end_date)) AS school_info
+#             FROM
+#                 db_fl_ul_dpar.school
+#             GROUP BY
+#                 iin
+#         ) AS s2 ON s.iin = s2.iin
+#
+#         WHERE s.iin = %(iin)s
+#         """
+#     result = client.query(query, parameters={'iin': iin})
+#     result2 = client.query(query2, parameters={'iin': iin})
+#
+#     combined = {
+#         "data": result.named_results(),
+#         "study": result2.named_results()
+#     }
+#     return combined
+
+
 @app.get("/get_relatives/{iin}")
 async def get_relatives(iin: str):
     if len(iin) != 12:
@@ -394,6 +307,7 @@ async def get_relatives(iin: str):
     if not result.result_rows:
         raise HTTPException(status_code=404, detail="Data not found")
     return result.named_results()
+
 
 @app.get("/hello")
 async def get_data2():
