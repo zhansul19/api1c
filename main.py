@@ -71,7 +71,7 @@ async def read_photo(iin: str):
 
 
 @app.get("/get_data/{iin}")
-async def read_photo(iin: str):
+async def read_data(iin: str):
     conn = connect_to_db()
     if conn:
         cursor = conn.cursor()
@@ -86,21 +86,21 @@ async def read_photo(iin: str):
             when fp."SEX_ID"='2' then 'Женщина'
          end as SEX,
          fp."BIRTH_DATE",
-         
+
          dc."RU_NAME" as "BIRTH_COUNTRY_RU",
          dc."KZ_NAME"as "BIRTH_COUNTRY_KZ",
-          
-         
+
+
          dd."RU_NAME" as "BIRTH_DISTRICT_NAME_RU",
          dd."KZ_NAME" as "BIRTH_DISTRICT_NAME_KZ",
          dr."RU_NAME" as "BIRTH_REGION_NAME_RU",
          dr."KZ_NAME" as "BIRTH_REGION_NAME_KZ",
-        
+
         fp."BIRTH_CITY",
         dc2."RU_NAME" as "CITIZENSHIP",
          dn."RU_NAME" as "NATIONALITY_RU",
          dn."KZ_NAME" as "NATIONALITY_KZ",
-         
+
          ddtn."RU_NAME" as "DOCUMENT_TYPE",
          fd."DOCUMENT_NUMBER",
          fd."DOCUMENT_BEGIN_DATE",
@@ -116,74 +116,83 @@ async def read_photo(iin: str):
         left join "dictionary".d_region dr on fp."BIRTH_REGION_ID"  =cast(dr."ID"  as text )
         left join "dictionary".d_document_type_new ddtn on fd."DOCUMENT_TYPE_ID" =cast(ddtn."ID"  as text )
         left join "dictionary".d_doc_organization ddo on fd."ISSUE_ORGANIZATION_ID" =cast(ddo."ID"  as text )
-        
-        
+
+
         where fp."IIN" like %s
         AND ddtn."ID" = 2 
         order by fd."DOCUMENT_BEGIN_DATE" desc
-""", (iin,))
+        """, (iin,))
         row = cursor.fetchone()
         conn.close()
 
-        query2 = """SELECT 
-                    s.iin AS IIN,
-                    s.study_info AS STUDY,
-                    s2.school_info AS SCHOOL,
-                    ra.`Адрес на русском` AS ADDRESS,
-                    nb.phonenumber_ AS PHONE_NUMBER
-                FROM (
-                    SELECT 
-                        iin,
-                        groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
-                    FROM 
-                        db_fl_ul_dpar.study
-                    GROUP BY 
-                        iin
-                ) AS s
-                LEFT JOIN (
-                    SELECT 
-                        iin,
-                        groupArray(tuple(school_code AS school_code, school_name AS school_name, start_date AS start_date, end_date AS end_date)) AS school_info
-                    FROM 
-                        db_fl_ul_dpar.school
-                    GROUP BY 
-                        iin
-                ) AS s2 ON s.iin = s2.iin
-                LEFT JOIN 
-                    db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
-                LEFT JOIN
-                    db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
-                WHERE 
-                    s.iin = %(iin)s 
-                           """
+        client = clickhouse_connect.get_client(user='nifitest',
+                                               password='nifitest',
+                                               host='192.168.122.45',
+                                               port=8123)
+
+        query2 = """
+        SELECT 
+            s.iin AS IIN,
+            s.study_info AS STUDY,
+            s2.school_info AS SCHOOL,
+            ra.`Адрес на русском` AS ADDRESS,
+            nb.phonenumber_ AS PHONE_NUMBER
+        FROM (
+            SELECT 
+                iin,
+                groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
+            FROM 
+                db_fl_ul_dpar.study
+            GROUP BY 
+                iin
+        ) AS s
+        LEFT JOIN (
+            SELECT 
+                iin,
+                groupArray(tuple(school_code AS school_code, school_name AS school_name, start_date AS start_date, end_date AS end_date)) AS school_info
+            FROM 
+                db_fl_ul_dpar.school
+            GROUP BY 
+                iin
+        ) AS s2 ON s.iin = s2.iin
+        LEFT JOIN 
+            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
+        LEFT JOIN
+            db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
+        WHERE 
+            s.iin = %(iin)s 
+        """
         result = client.query(query2, parameters={'iin': iin})
 
         data = result.named_results()
 
-        # Process the results
-        for row1 in data:
-            study_info = [
-                {
-                    'study_bin': study[0],
-                    'study_name': study[1],
-                    'start_date': study[2],
-                    'end_date': study[3]
-                }
-                for study in row1['STUDY']
-            ]
-            school_info = [
-                {
-                    'school_bin': school[0],
-                    'school_name': school[1],
-                    'start_date': school[2],
-                    'end_date': school[3]
-                }
-                for school in row1['SCHOOL']
-            ]
-            row1['STUDY'] = study_info
-            row1['SCHOOL'] = school_info
+        if row and data:
+            # Process the results from ClickHouse
+            processed_data = []
+            for row1 in data:
+                study_info = [
+                    {
+                        'study_bin': study[0],
+                        'study_name': study[1],
+                        'start_date': study[2],
+                        'end_date': study[3]
+                    }
+                    for study in row1['STUDY']
+                ]
+                school_info = [
+                    {
+                        'school_bin': school[0],
+                        'school_name': school[1],
+                        'start_date': school[2],
+                        'end_date': school[3]
+                    }
+                    for school in row1['SCHOOL']
+                ]
+                row1['STUDY'] = study_info
+                row1['SCHOOL'] = school_info
+                processed_data.append(row1)
 
-        if row:
+            # Combine PostgreSQL and ClickHouse results
             data = {
                 "IIN": row[0],
                 "FIRSTNAME": row[1],
@@ -197,8 +206,8 @@ async def read_photo(iin: str):
                 "BIRTH_DISTRICT_NAME_KZ": row[9],
                 "BIRTH_REGION_NAME_RU": row[10],
                 "BIRTH_REGION_NAME_KZ": row[11],
-                 "BIRTH_CITY": row[12],
-                 "CITIZENSHIP": row[13],
+                "BIRTH_CITY": row[12],
+                "CITIZENSHIP": row[13],
                 "NATIONALITY_RU": row[14],
                 "NATIONALITY_KZ": row[15],
                 "DOCUMENT_TYPE": row[16],
@@ -206,10 +215,12 @@ async def read_photo(iin: str):
                 "DOCUMENT_BEGIN_DATE": row[18],
                 "DOCUMENT_END_DATE": row[19],
                 "ISSUE_ORGANIZATION": row[20],
-                "data": row1
+                "data": processed_data
             }
 
             return data
+        else:
+            return {"detail": "No data found for the provided IIN."}
 
     else:
         raise HTTPException(status_code=500, detail="Failed to connect to the database")
