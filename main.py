@@ -125,40 +125,64 @@ async def read_photo(iin: str):
         row = cursor.fetchone()
         conn.close()
 
-
         query2 = """SELECT 
-            s.iin AS IIN,
-            s.study_info AS STUDY,
-            s2.school_info AS SCHOOL,
-            ra.`Адрес на русском` AS ADDRESS,
-          nb.phonenumber_ AS PHONE_NUMBER
-
-        FROM (
-            SELECT 
-                iin,
-                groupArray(tuple(study_code, study_name, start_date, end_date)) AS study_info
-            FROM 
-                db_fl_ul_dpar.study
-            GROUP BY 
-                iin
-        ) AS s
-        LEFT JOIN (
-            SELECT 
-                iin,
-                groupArray(tuple(school_code, school_name, start_date, end_date)) AS school_info
-            FROM 
-                db_fl_ul_dpar.school
-            GROUP BY 
-                iin
-        ) AS s2 ON s.iin = s2.iin
-        LEFT JOIN 
-            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН` 
-        LEFT JOIN
-           db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
-           
-                WHERE s.iin = %(iin)s 
-                """
+                    s.iin AS IIN,
+                    s.study_info AS STUDY,
+                    s2.school_info AS SCHOOL,
+                    ra.`Адрес на русском` AS ADDRESS,
+                    nb.phonenumber_ AS PHONE_NUMBER
+                FROM (
+                    SELECT 
+                        iin,
+                        groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
+                    FROM 
+                        db_fl_ul_dpar.study
+                    GROUP BY 
+                        iin
+                ) AS s
+                LEFT JOIN (
+                    SELECT 
+                        iin,
+                        groupArray(tuple(school_code AS school_code, school_name AS school_name, start_date AS start_date, end_date AS end_date)) AS school_info
+                    FROM 
+                        db_fl_ul_dpar.school
+                    GROUP BY 
+                        iin
+                ) AS s2 ON s.iin = s2.iin
+                LEFT JOIN 
+                    db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
+                LEFT JOIN
+                    db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
+                WHERE 
+                    s.iin = %(iin)s 
+                           """
         result = client.query(query2, parameters={'iin': iin})
+
+        data = result.named_results()
+
+        # Process the results
+        for row1 in data:
+            study_info = [
+                {
+                    'study_bin': study[0],
+                    'study_name': study[1],
+                    'start_date': study[2],
+                    'end_date': study[3]
+                }
+                for study in row1['STUDY']
+            ]
+            school_info = [
+                {
+                    'school_bin': school[0],
+                    'school_name': school[1],
+                    'start_date': school[2],
+                    'end_date': school[3]
+                }
+                for school in row1['SCHOOL']
+            ]
+            row1['STUDY'] = study_info
+            row1['SCHOOL'] = school_info
+
         if row:
             data = {
                 "IIN": row[0],
@@ -182,8 +206,7 @@ async def read_photo(iin: str):
                 "DOCUMENT_BEGIN_DATE": row[18],
                 "DOCUMENT_END_DATE": row[19],
                 "ISSUE_ORGANIZATION": row[20],
-
-                 "data": result.named_results()
+                "data": row1
             }
 
             return data
@@ -191,6 +214,68 @@ async def read_photo(iin: str):
     else:
         raise HTTPException(status_code=500, detail="Failed to connect to the database")
 
+
+@app.get("/get_data2/{iin}")
+async def read_photo(iin: str):
+    query2 = """SELECT 
+            s.iin AS IIN,
+            s.study_info AS STUDY,
+            s2.school_info AS SCHOOL,
+            ra.`Адрес на русском` AS ADDRESS,
+            nb.phonenumber_ AS PHONE_NUMBER
+        FROM (
+            SELECT 
+                iin,
+                groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
+            FROM 
+                db_fl_ul_dpar.study
+            GROUP BY 
+                iin
+        ) AS s
+        LEFT JOIN (
+            SELECT 
+                iin,
+                groupArray(tuple(school_code AS school_code, school_name AS school_name, start_date AS start_date, end_date AS end_date)) AS school_info
+            FROM 
+                db_fl_ul_dpar.school
+            GROUP BY 
+                iin
+        ) AS s2 ON s.iin = s2.iin
+        LEFT JOIN 
+            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
+        LEFT JOIN
+            db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
+        WHERE 
+            s.iin = %(iin)s 
+                   """
+    result = client.query(query2, parameters={'iin': iin})
+
+    data = result.named_results()
+
+    # Process the results
+    for row in data:
+        study_info = [
+            {
+                'study_code': study[0],
+                'study_name': study[1],
+                'start_date': study[2],
+                'end_date': study[3]
+            }
+            for study in row['STUDY']
+        ]
+        school_info = [
+            {
+                'school_code': school[0],
+                'school_name': school[1],
+                'start_date': school[2],
+                'end_date': school[3]
+            }
+            for school in row['SCHOOL']
+        ]
+        row['STUDY'] = study_info
+        row['SCHOOL'] = school_info
+
+    return row
 # @app.get("/get_data/{iin}")
 # async def get_data(iin: str):
 #     if len(iin) != 12:
