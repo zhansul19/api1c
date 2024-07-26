@@ -4,7 +4,7 @@ import clickhouse_connect
 import psycopg2
 from PIL import Image
 import io
-import httpx
+
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -19,10 +19,12 @@ DATABASE_CONFIG = {
         'database': 'postgres',
         'user': 'photo_user',
         'password': 'TgYhUj123!@#',
+        # 'user': 'postgres',
+        # 'password': 'P9Kbb+A%D#',
         'host': '192.168.122.6',
         'port': '5432'
 }
-
+# h8MuxLk~1zKGZ
 
 def connect_to_db():
     try:
@@ -226,181 +228,6 @@ async def read_data(iin: str):
         raise HTTPException(status_code=500, detail="Failed to connect to the database")
 
 
-@app.get("/get_data2/{iin}")
-async def read_photo(iin: str):
-    query2 = """SELECT 
-            s.iin AS IIN,
-            s.study_info AS STUDY,
-            s2.school_info AS SCHOOL,
-            ra.`Адрес на русском` AS ADDRESS,
-            nb.phonenumber_ AS PHONE_NUMBER
-        FROM (
-            SELECT 
-                iin,
-                groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
-            FROM 
-                db_fl_ul_dpar.study
-            GROUP BY 
-                iin
-        ) AS s
-        LEFT JOIN (
-            SELECT 
-                iin,
-                groupArray(tuple(school_code AS school_code, school_name AS school_name, start_date AS start_date, end_date AS end_date)) AS school_info
-            FROM 
-                db_fl_ul_dpar.school
-            GROUP BY 
-                iin
-        ) AS s2 ON s.iin = s2.iin
-        LEFT JOIN 
-            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
-        LEFT JOIN
-            db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
-        WHERE 
-            s.iin = %(iin)s 
-                   """
-    result = client.query(query2, parameters={'iin': iin})
-
-    data = result.named_results()
-
-    # Process the results
-    for row in data:
-        study_info = [
-            {
-                'study_code': study[0],
-                'study_name': study[1],
-                'start_date': study[2],
-                'end_date': study[3]
-            }
-            for study in row['STUDY']
-        ]
-        school_info = [
-            {
-                'school_code': school[0],
-                'school_name': school[1],
-                'start_date': school[2],
-                'end_date': school[3]
-            }
-            for school in row['SCHOOL']
-        ]
-        row['STUDY'] = study_info
-        row['SCHOOL'] = school_info
-
-    return row
-# @app.get("/get_data/{iin}")
-# async def get_data(iin: str):
-#     if len(iin) != 12:
-#         raise HTTPException(status_code=404, detail="IIN Length should be 12")
-#
-#     query = ("""
-#          SELECT
-#             dd.IIN AS IIN,
-#             dd.FIRSTNAME_ AS FIRSTNAME,
-#             dd.SURNAME_ AS SURNAME,
-#             dd.SECONDNAME_ AS SECONDNAME,
-#             IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
-#             dd.BIRTH_DATE_ AS BIRTH_DATE,
-#             dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
-#             dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
-#             dr.RU_NAME AS BIRTH_REGION_RU_NAME,
-#             dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
-#             dd.BIRTH_CITY AS BIRTH_CITY,
-#
-#             dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
-#             dd.ISSUE_ORGANIZATION_ID,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             dd.DOCUMENT_END_DATE,
-#             n.RU_NAME AS NATIONALITY,
-#             n.KZ_NAME AS NATIONALITY_KZ,
-#             dc.RU_NAME AS COUNTRY_RU_NAME,
-#             dc.KZ_NAME AS COUNTRY_KZ_NAME,
-#             ra.`Адрес на русском` AS ADDRESS,
-#             nb.phonenumber_ AS PHONE_NUMBER
-#
-#         FROM
-#             db_fl_ul_dpar.damp_document AS dd
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
-#         LEFT JOIN
-#             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
-#         LEFT JOIN
-#             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН`
-#         LEFT JOIN
-#             db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
-#         WHERE
-#             dd.IIN = %(iin)s
-#             AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-#             AND dd.DOCUMENT_BEGIN_DATE = (
-#                 SELECT MAX(d2.DOCUMENT_BEGIN_DATE)
-#                 FROM db_fl_ul_dpar.damp_document d2
-#                 WHERE d2.IIN = %(iin)s
-#                 AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-#             )
-#         GROUP BY
-#             dd.IIN,
-#             dd.FIRSTNAME_,
-#             dd.SECONDNAME_,
-#             dd.SURNAME_,
-#             dd.BIRTH_DATE_,
-#             dd.BIRTH_CITY,
-#             dd.BIRTH_REGION_NAME,
-#             dd.BIRTH_DISTRICT_NAME,
-#             dd2.RU_NAME,
-#             dd2.KZ_NAME,
-#             dr.RU_NAME,
-#             dr.KZ_NAME,
-#             dc.RU_NAME,
-#             dc.KZ_NAME,
-#             dd.SEX_ID,
-#             n.RU_NAME,
-#             n.KZ_NAME,
-#             dd.CITIZENSHIP_ID,
-#             dd.DOCUMENT_NUMBER,
-#             dd.ISSUE_ORGANIZATION_ID,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             dd.DOCUMENT_END_DATE,
-#             ra.`Адрес на русском`,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             nb.phonenumber_
-#     """)
-#     query2 = """SELECT
-#             s.iin AS IIN,
-#             s.study_info AS STUDY,
-#             s2.school_info AS SCHOOL
-#         FROM (
-#             SELECT
-#                 iin,
-#                 groupArray(tuple(study_code, study_name, start_date, end_date)) AS study_info
-#             FROM
-#                 db_fl_ul_dpar.study
-#             GROUP BY
-#                 iin
-#         ) AS s
-#         LEFT JOIN (
-#             SELECT
-#                 iin,
-#                 groupArray(tuple(school_code, school_name, start_date, end_date)) AS school_info
-#             FROM
-#                 db_fl_ul_dpar.school
-#             GROUP BY
-#                 iin
-#         ) AS s2 ON s.iin = s2.iin
-#
-#         WHERE s.iin = %(iin)s
-#         """
-#     result = client.query(query, parameters={'iin': iin})
-#     result2 = client.query(query2, parameters={'iin': iin})
-#
-#     combined = {
-#         "data": result.named_results(),
-#         "study": result2.named_results()
-#     }
-#     return combined
-
 
 @app.get("/get_relatives/{iin}")
 async def get_relatives(iin: str):
@@ -415,19 +242,47 @@ async def get_relatives(iin: str):
                 WHEN MAX(LENGTH(fr.marriage_reg_date)) > 1 THEN 'Married'
                 ELSE 'Single'
             END AS STATUS,
-            groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type)) AS relatives
+            groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type,nb.phonenumber_)) AS relatives
         FROM 
             ser.fl_relatives fr 
+        LEFT JOIN db_fl_ul_dpar.numb AS nb ON fr.parent_iin = nb.iin_
+        
         WHERE 
             fr.iin = %(iin)s
         GROUP BY 
             fr.iin
     """)
 
-    result = client.query(query, parameters={'iin': iin})
-    if not result.result_rows:
-        raise HTTPException(status_code=404, detail="Data not found")
-    return result.named_results()
+    try:
+        result = client.query(query, parameters={'iin': iin})
+        data = result.named_results()
+
+        if not data:
+            raise HTTPException(status_code=404, detail="No data found")
+
+        # Process the results
+        for row in data:
+            relatives = [
+                {
+                    'IIN': relative[0],
+                    'FIO': relative[1],
+                    'BIRTH_DATE': relative[2],
+                    'RELATIVE_TYPE': relative[3],
+                    'PHONE_NUMBER': relative[4]
+                }
+                for relative in row['relatives']
+            ]
+
+            data2 = {
+                "IIN": row['iin'],
+                "STATUS": row['STATUS'],
+                "RELATIVES": relatives
+            }
+
+        return data2
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/hello")
