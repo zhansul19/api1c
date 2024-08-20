@@ -132,12 +132,13 @@ async def read_data(iin: str):
 
         query2 = """
         SELECT 
-            s.iin AS IIN,
+            nb.iin_ AS IIN,
             s.study_info AS STUDY,
             s2.school_info AS SCHOOL,
             ra.`Адрес на русском` AS ADDRESS,
             nb.phonenumber_ AS PHONE_NUMBER
-        FROM (
+        FROM db_fl_ul_dpar.numb AS nb 
+        left join(
             SELECT 
                 iin,
                 groupArray(tuple(study_code AS study_code, study_name AS study_name, start_date AS start_date, end_date AS end_date)) AS study_info
@@ -145,7 +146,7 @@ async def read_data(iin: str):
                 db_fl_ul_dpar.study
             GROUP BY 
                 iin
-        ) AS s
+        ) AS s ON s.iin = nb.iin_
         LEFT JOIN (
             SELECT 
                 iin,
@@ -156,11 +157,11 @@ async def read_data(iin: str):
                 iin
         ) AS s2 ON s.iin = s2.iin
         LEFT JOIN 
-            db_fl_ul_dpar.reg_address AS ra ON s.iin = ra.`ИИН/БИН`
-        LEFT JOIN
-            db_fl_ul_dpar.numb AS nb ON s.iin = nb.iin_
+            db_fl_ul_dpar.reg_address AS ra ON nb.iin_ = ra.`ИИН/БИН`
+            
         WHERE 
-            s.iin = %(iin)s 
+            nb.iin_ = %(iin)s 
+        SETTINGS join_algorithm = 'parallel_hash'
         """
         result = client.query(query2, parameters={'iin': iin})
 
@@ -287,121 +288,6 @@ async def read_photo(iin: str):
         row['SCHOOL'] = school_info
 
     return row
-# @app.get("/get_data/{iin}")
-# async def get_data(iin: str):
-#     if len(iin) != 12:
-#         raise HTTPException(status_code=404, detail="IIN Length should be 12")
-#
-#     query = ("""
-#          SELECT
-#             dd.IIN AS IIN,
-#             dd.FIRSTNAME_ AS FIRSTNAME,
-#             dd.SURNAME_ AS SURNAME,
-#             dd.SECONDNAME_ AS SECONDNAME,
-#             IF(dd.SEX_ID = '1', 'Мужчина', IF(dd.SEX_ID = '2', 'Женщина', 'Unknown')) AS SEX,
-#             dd.BIRTH_DATE_ AS BIRTH_DATE,
-#             dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
-#             dd2.KZ_NAME AS BIRTH_DISTRICT_KZ_NAME,
-#             dr.RU_NAME AS BIRTH_REGION_RU_NAME,
-#             dr.KZ_NAME AS BIRTH_REGION_KZ_NAME,
-#             dd.BIRTH_CITY AS BIRTH_CITY,
-#
-#             dd.DOCUMENT_NUMBER AS DOCUMENT_NUMBER,
-#             dd.ISSUE_ORGANIZATION_ID,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             dd.DOCUMENT_END_DATE,
-#             n.RU_NAME AS NATIONALITY,
-#             n.KZ_NAME AS NATIONALITY_KZ,
-#             dc.RU_NAME AS COUNTRY_RU_NAME,
-#             dc.KZ_NAME AS COUNTRY_KZ_NAME,
-#             ra.`Адрес на русском` AS ADDRESS,
-#             nb.phonenumber_ AS PHONE_NUMBER
-#
-#         FROM
-#             db_fl_ul_dpar.damp_document AS dd
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_COUNTRY AS dc ON dd.CITIZENSHIP_ID = CAST(dc.ID AS String)
-#         LEFT JOIN
-#             db_fl_ul_dpar.nationality AS n ON dd.NATIONALTY_ID = CAST(n.ID AS String) AND dd.SEX_ID = n.SEX
-#         LEFT JOIN
-#             db_fl_ul_dpar.reg_address AS ra ON dd.IIN = ra.`ИИН/БИН`
-#         LEFT JOIN
-#             db_fl_ul_dpar.numb AS nb ON dd.IIN = nb.iin_
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON dd.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
-#         LEFT JOIN
-#             db_fl_ul_dpar.DIC_REGION AS dr ON dd.BIRTH_REGION_ID = CAST(dr.ID AS String)
-#         WHERE
-#             dd.IIN = %(iin)s
-#             AND dd.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-#             AND dd.DOCUMENT_BEGIN_DATE = (
-#                 SELECT MAX(d2.DOCUMENT_BEGIN_DATE)
-#                 FROM db_fl_ul_dpar.damp_document d2
-#                 WHERE d2.IIN = %(iin)s
-#                 AND d2.DOCUMENT_TYPE_ID = 'УДОСТОВЕРЕНИЕ РК'
-#             )
-#         GROUP BY
-#             dd.IIN,
-#             dd.FIRSTNAME_,
-#             dd.SECONDNAME_,
-#             dd.SURNAME_,
-#             dd.BIRTH_DATE_,
-#             dd.BIRTH_CITY,
-#             dd.BIRTH_REGION_NAME,
-#             dd.BIRTH_DISTRICT_NAME,
-#             dd2.RU_NAME,
-#             dd2.KZ_NAME,
-#             dr.RU_NAME,
-#             dr.KZ_NAME,
-#             dc.RU_NAME,
-#             dc.KZ_NAME,
-#             dd.SEX_ID,
-#             n.RU_NAME,
-#             n.KZ_NAME,
-#             dd.CITIZENSHIP_ID,
-#             dd.DOCUMENT_NUMBER,
-#             dd.ISSUE_ORGANIZATION_ID,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             dd.DOCUMENT_END_DATE,
-#             ra.`Адрес на русском`,
-#             dd.DOCUMENT_BEGIN_DATE,
-#             nb.phonenumber_
-#     """)
-#     query2 = """SELECT
-#             s.iin AS IIN,
-#             s.study_info AS STUDY,
-#             s2.school_info AS SCHOOL
-#         FROM (
-#             SELECT
-#                 iin,
-#                 groupArray(tuple(study_code, study_name, start_date, end_date)) AS study_info
-#             FROM
-#                 db_fl_ul_dpar.study
-#             GROUP BY
-#                 iin
-#         ) AS s
-#         LEFT JOIN (
-#             SELECT
-#                 iin,
-#                 groupArray(tuple(school_code, school_name, start_date, end_date)) AS school_info
-#             FROM
-#                 db_fl_ul_dpar.school
-#             GROUP BY
-#                 iin
-#         ) AS s2 ON s.iin = s2.iin
-#
-#         WHERE s.iin = %(iin)s
-#         """
-#     result = client.query(query, parameters={'iin': iin})
-#     result2 = client.query(query2, parameters={'iin': iin})
-#
-#     combined = {
-#         "data": result.named_results(),
-#         "study": result2.named_results()
-#     }
-#     return combined
-
-
 @app.get("/get_relatives/{iin}")
 async def get_relatives(iin: str):
     if len(iin) != 12:
@@ -429,7 +315,124 @@ async def get_relatives(iin: str):
         raise HTTPException(status_code=404, detail="Data not found")
     return result.named_results()
 
+#new get relatives
+# @app.get("/get_relatives/{iin}")
+# async def get_relatives(iin: str):
+#     if len(iin) != 12:
+#         raise HTTPException(status_code=404, detail="IIN Length should be 12")
+#
+#     query = ("""
+#         SELECT
+#             fr.iin,
+#
+#             CASE
+#                 WHEN MAX(LENGTH(fr.marriage_divorce_date)) > 1 THEN 'Divorced'
+#                 WHEN MAX(LENGTH(fr.marriage_reg_date)) > 1 THEN 'Married'
+#                 ELSE 'Single'
+#             END AS STATUS,
+#             groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type,nb.phonenumber_
+#             , ra.`Адрес на русском`,
+#             dc.RU_NAME AS COUNTRY_RU_NAME,
+#             dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
+#             dr1.RU_NAME AS BIRTH_REGION_RU_NAME,
+#             fp.BIRTH_CITY
+#             )) AS relatives
+#         FROM
+#             ser.fl_relatives fr
+#         LEFT JOIN ser.fl_person AS fp ON fr.parent_iin = fp.IIN
+#         LEFT JOIN db_fl_ul_dpar.numb AS nb ON fr.parent_iin = nb.iin_
+#         LEFT JOIN db_fl_ul_dpar.reg_address AS ra ON fr.parent_iin = ra.`ИИН/БИН`
+#         LEFT JOIN db_fl_ul_dpar.DIC_DISTRICTS AS dd2 ON fp.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
+#         LEFT JOIN db_fl_ul_dpar.DIC_REGION AS dr1 ON fp.BIRTH_REGION_ID = CAST(dr1.ID AS String)
+#         LEFT JOIN db_fl_ul_dpar.DIC_COUNTRY AS dc ON fp.CITIZENSHIP_ID = CAST(dc.ID AS String)
+#         WHERE
+#             fr.iin = %(iin)s
+#         GROUP BY
+#             fr.iin
+#         SETTINGS join_algorithm = 'parallel_hash'
+#     """)
+#
+#     result = client.query(query, parameters={'iin': iin})
+#     if not result.result_rows:
+#         raise HTTPException(status_code=404, detail="Data not found")
+#     return result.named_results()
+
 
 @app.get("/hello")
 async def get_data2():
     return "hello world"
+
+#
+# @app.get("/get_relatives2/{iin}")
+# async def get_relatives(iin: str):
+#     if len(iin) != 12:
+#         raise HTTPException(status_code=404, detail="IIN Length should be 12")
+#
+#     query = ("""
+#         SELECT
+#             fr.iin,
+#
+#             CASE
+#                 WHEN MAX(LENGTH(fr.marriage_divorce_date)) > 1 THEN 'Divorced'
+#                 WHEN MAX(LENGTH(fr.marriage_reg_date)) > 1 THEN 'Married'
+#                 ELSE 'Single'
+#             END AS STATUS,
+#             groupArray(tuple(fr.parent_iin, fr.parent_fio, fr.parent_birth_date, fr.relative_type,nb.phonenumber_
+#             , ra.`Адрес на русском`,
+#             dc.RU_NAME AS COUNTRY_RU_NAME,
+#             dd2.RU_NAME AS BIRTH_DISTRICT_RU_NAME,
+#             dr1.RU_NAME AS BIRTH_REGION_RU_NAME,
+#             fp.BIRTH_CITY
+#             )) AS relatives
+#         FROM
+#             ser.fl_relatives fr
+#         LEFT JOIN ser.fl_person 				AS fp  ON fr.parent_iin 		= fp.IIN
+#         LEFT JOIN db_fl_ul_dpar.numb 			AS nb  ON fr.parent_iin 		= nb.iin_
+#         LEFT JOIN db_fl_ul_dpar.reg_address 	AS ra  ON fr.parent_iin 		= ra.`ИИН/БИН`
+#         LEFT JOIN db_fl_ul_dpar.DIC_DISTRICTS 	AS dd2 ON fp.BIRTH_DISTRICTS_ID = CAST(dd2.ID AS String)
+#         LEFT JOIN db_fl_ul_dpar.DIC_REGION_uniq AS dr1 ON fp.BIRTH_REGION_ID 	= CAST(dr1.ID AS String)
+#         LEFT JOIN db_fl_ul_dpar.DIC_COUNTRY 	AS dc  ON fp.CITIZENSHIP_ID 	= CAST(dc.ID AS String)
+#         WHERE
+#             fr.iin = %(iin)s
+#         GROUP BY
+#             fr.iin
+#         SETTINGS join_algorithm = 'parallel_hash'
+#     """)
+#
+#     try:
+#         result = client.query(query, parameters={'iin': iin})
+#         data = result.named_results()
+#
+#         if not data:
+#             raise HTTPException(status_code=404, detail="No data found")
+#
+#         # Process the results
+#         processed_data = []
+#         for row in data:
+#             relatives = [
+#                 {
+#                     'IIN': relative[0],
+#                     'FIO': relative[1],
+#                     'BIRTH_DATE': relative[2],
+#                     'RELATIVE_TYPE': relative[3],
+#                     'PHONE_NUMBER': relative[4],
+#                     'REG_ADDRESS': relative[5],
+#                     'COUNTRY': relative[6],
+#                     'DISTRICT': relative[7],
+#                     'REGION': relative[8],
+#                     'CITY': relative[9],
+#                 }
+#                 for relative in row['relatives']
+#             ]
+#
+#             data2 = {
+#                 "IIN": row['fr.iin'],
+#                 "STATUS": row['STATUS'],
+#                 "RELATIVES": relatives
+#             }
+#             processed_data.append(data2)
+#
+#         return processed_data
+#
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
