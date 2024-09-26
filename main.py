@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException,Response
 from fastapi.responses import StreamingResponse
 import clickhouse_connect
 import psycopg2
@@ -15,60 +15,89 @@ client = clickhouse_connect.get_client(user='nifitest',
                                        port=8123)
 
 
-DATABASE_CONFIG = {
-        'database': 'postgres',
-        'user': 'photo_user',
-        'password': 'TgYhUj123!@#',
-        'host': '192.168.122.6',
-        'port': '5432'
-}
+# DATABASE_CONFIG = {
+#         'database': 'postgres',
+#         'user': 'photo_user',
+#         'password': 'TgYhUj123!@#',
+#         'host': '192.168.122.6',
+#         'port': '5432'
+# }
+# DATABASE_CONFIG2 = {
+#         'database': 'etanu',
+#         'user': 'readonly_user',
+#         'password': '1q2w3e$R%T',
+#         'host': '192.168.122.110',
+#         'port': '5432'
+# }
+#
+# def connect_to_db():
+#     try:
+#         conn = psycopg2.connect(**DATABASE_CONFIG2)
+#         return conn
+#     except Exception as e:
+#         print("Unable to connect to the database:", e)
+#         return None
 
-
-def connect_to_db():
-    try:
-        conn = psycopg2.connect(**DATABASE_CONFIG)
-        return conn
-    except Exception as e:
-        print("Unable to connect to the database:", e)
-        return None
-
-
-@app.get("/get_photo/{iin}")
-async def read_photo(iin: str):
-    conn = connect_to_db()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return StreamingResponse(iter([bytes(row[0])]),media_type='application/octet-stream')
-        else:
-            raise HTTPException(status_code=404, detail="No photo found for the given iin")
-    else:
-        raise HTTPException(status_code=500, detail="Failed to connect to the database")
-
-@app.get("/get_photo_png/{iin}")
-async def read_photo(iin: str):
-    conn = connect_to_db()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            # Convert bytea data to PNG image
-            bytea_data = row[0]
-            image = Image.open(io.BytesIO(bytea_data))
-
-            # Convert the image to PNG format and return it
-            with io.BytesIO() as output:
-                image.save(output, format="PNG")
-                return StreamingResponse(iter([output.getvalue()]), media_type='image/png')
-
-    else:
-        raise HTTPException(status_code=500, detail="Failed to connect to the database")
-
+#
+# @app.get("/get_photo/{iin}")
+# async def read_photo(iin: str):
+#     conn = connect_to_db()
+#     if conn:
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
+#         row = cursor.fetchone()
+#         conn.close()
+#         if row:
+#             return StreamingResponse(iter([bytes(row[0])]),media_type='application/octet-stream')
+#         else:
+#             raise HTTPException(status_code=404, detail="No photo found for the given iin")
+#     else:
+#         raise HTTPException(status_code=500, detail="Failed to connect to the database")
+#
+# @app.get("/get_photo_png/{iin}")
+# async def read_photo(iin: str):
+#     conn = connect_to_db()
+#     if conn:
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT photo FROM import_fl.photo WHERE iin = %s and document_type_id='2'", (iin,))
+#         row = cursor.fetchone()
+#         conn.close()
+#         if row:
+#             # Convert bytea data to PNG image
+#             bytea_data = row[0]
+#             image = Image.open(io.BytesIO(bytea_data))
+#
+#             # Convert the image to PNG format and return it
+#             with io.BytesIO() as output:
+#                 image.save(output, format="PNG")
+#                 return StreamingResponse(iter([output.getvalue()]), media_type='image/png')
+#
+#     else:
+#         raise HTTPException(status_code=500, detail="Failed to connect to the database")
+# @app.get("/get_photo_png/{iin}")
+# async def read_photo(iin: str):
+#     conn = connect_to_db()
+#     if conn:
+#         cursor = conn.cursor()
+#         cursor.execute("""SELECT photo
+#                             FROM public.metadata_gallery mg
+#                             inner join metadata_person mp on mg."personId_id" =mp.id
+#                             where mp.iin ='991206300443' limit 1""", (iin,))
+#         row = cursor.fetchone()
+#         conn.close()
+#         return Response(content=row[0],media_type="image/png")
+#         # if row:
+#         #     # Convert bytea data to PNG image
+#         #     bytea_data = row[0]
+#         #     image = Image.open(io.BytesIO(bytea_data))
+#         #
+#         #     # Convert the image to PNG format and return it
+#         #     with io.BytesIO() as output:
+#         #         image.save(output, format="PNG")
+#         #         return StreamingResponse(iter([output.getvalue()]), media_type='image/png')
+#
+#     else:
+#         raise HTTPException(status_code=500, detail="Failed to connect to the database")
 
 @app.get("/get_data2/{iin}")
 async def read_data(iin: str):
