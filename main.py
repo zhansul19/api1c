@@ -83,7 +83,7 @@ async def read_data(iin: str):
                 WHEN dd.SEX_ID = '1' THEN 'Мужчина'
                 WHEN dd.SEX_ID = '2' THEN 'Женщина'
             END AS SEX,
-            dd.BIRTH_DATE BIRTH_DATE,
+            replace(dd.BIRTH_DATE,'/','-')as BIRTH_DATE,
             dc.RU_NAME AS BIRTH_COUNTRY_RU,
             dc.KZ_NAME AS BIRTH_COUNTRY_KZ,
             dd2.RU_NAME AS BIRTH_DISTRICT_NAME_RU,
